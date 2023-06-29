@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "trychromadb"
+version = "0.1.0"
+description = ""
+authors = ["dlange <dave.lange@docusign.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+chromadb = "^0.3.26"
+datasets = "*"
+transformers = "*"
+sentence-transformers = "*"
+gradio = "*"
+click = "*"
+pandas = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
