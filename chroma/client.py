@@ -1,5 +1,6 @@
 from typing import List, Dict, Tuple, Optional, Any
 import logging
+from pathlib import Path
 import pickle
 import click
 import pandas as pd
@@ -18,7 +19,9 @@ class TryChroma:
     TYPE_FCLIP_COL = "image_fclip"
     EMBEDDER_CLIP = 'sentence-transformers/clip-ViT-B-32'
     EMBEDDER_FCLIP = 'sentence-transformers/clip-ViT-L-14'
-    ID2IMAGE_MAP_FILENAME = "db/mapping_"
+    ID2IMAGE_MAP_BASE = "mapping_"
+    ID2IMAGE_MAP_CLIP = ID2IMAGE_MAP_BASE+TYPE_CLIP_COL+".pkl"
+    ID2IMAGE_MAP_FCLIP = ID2IMAGE_MAP_BASE+TYPE_FCLIP_COL+".pkl"
     MAX_RESULTS = 5
 
     def __init__(self):
@@ -39,6 +42,18 @@ class TryChroma:
             TryChroma.TYPE_CLIP_COL: self._embedder_clip,
             TryChroma.TYPE_FCLIP_COL: self._embedder_fclip
         }
+        mapping_clip_path = Path("./db", TryChroma.ID2IMAGE_MAP_CLIP)
+        mapping_fclip_path = Path("./db", TryChroma.ID2IMAGE_MAP_FCLIP)
+        self._id_path_mapper = {
+            TryChroma.TYPE_CLIP_COL: mapping_clip_path,
+            TryChroma.TYPE_FCLIP_COL: mapping_fclip_path
+        }
+        self._mapping_clip = self._inflate_map(mapping_clip_path) if mapping_clip_path.exists() else {}
+        self._mapping_fclip = self._inflate_map(mapping_fclip_path) if mapping_fclip_path.exists() else {}
+        self._id_mapper = {
+            TryChroma.TYPE_CLIP_COL: self._mapping_clip,
+            TryChroma.TYPE_FCLIP_COL: self._mapping_fclip
+        }
 
     def prepare(self, index_name: str) -> None:
         """
@@ -51,11 +66,19 @@ class TryChroma:
         images, metadata = self.load_dataset()
         embeddings = self.embeddings(index_name, images)
         self.build_index(index_name, embeddings, metadata)
-        self._persist_map(images, metadata, index_name)
+        self._persist_map(images, metadata, self._id_path_mapper[index_name])
 
     def search(self, query_image: Image,
                constraints: Dict[str, str],
                index_name: Optional[str] = "image_clip") -> List[Dict[str,Any]]:
+        """
+        Answer back a list of metadata search results from the given Image
+        and query constraints
+        :param query_image:
+        :param constraints:
+        :param index_name:
+        :return:
+        """
         results = self.query_index(index_name, query_image, TryChroma.MAX_RESULTS, constraints)
         return results
 
@@ -129,30 +152,32 @@ class TryChroma:
             images, _  = self.load_dataset(start=800, count=1)
             return images[0]
         else:
-            im = img.Image.open(image_path)
-            im.thumbnail((60,80), Image.Resampling.LANCZOS)
+            im = img.open(image_path)
+            im.thumbnail((60,80), img.Resampling.LANCZOS)
             return im
 
     def _ids_from_metadata(self, metadata: List[Dict[str, Any]]) -> List[str]:
         return [str(i) for i in pd.DataFrame(metadata)['id'].tolist()]
 
-    def _persist_map(self, images: List[object], metadata: List[Dict[str, Any]], index_name: str) -> None:
+    def _persist_map(self, images: List[object], metadata: List[Dict[str, Any]], mapping_path: Path) -> None:
         ids = self._ids_from_metadata(metadata)
-        id2image: Dict[str, Image] = dict(zip(ids, images))
-        with open(TryChroma.ID2IMAGE_MAP_FILENAME+index_name+".pkl", 'wb') as f:
+        id2image: Dict[str, object] = dict(zip(ids, images))
+        with open(mapping_path, 'wb') as f:
             pickle.dump(id2image, f)
 
-    def _inflate_map(self, index_name: str) -> Dict[str,Image]:
-        with open(TryChroma.ID2IMAGE_MAP_FILENAME+index_name+".pkl", 'rb') as f:
+    def _inflate_map(self, mapping_path: Path) -> Dict[str,Image]:
+        with open(mapping_path, 'rb') as f:
             id2image = pickle.load(f)
         return id2image
 
     def parse_results(self, metadata: List[Any], index_name: str) -> List[Image]:
         gallary = []
-        id2image: Dict[str, Image] = self._inflate_map(index_name)
+        id2image = self._id_mapper[index_name]
         for md in metadata:
             id = str(md['id'])
-            gallary.append(id2image[id])
+            im = id2image[id]
+            im.thumbnail((60, 80), img.Resampling.LANCZOS)
+            gallary.append(im)
         return gallary
 
     def display_result(self, metadata: List[Any], index_name: str) -> None:

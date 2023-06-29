@@ -1,14 +1,20 @@
 import gradio as gr
 from client import TryChroma
-from PIL import Image
+
+backend = TryChroma()
 
 
-def search_images_from_image(image):
-    img = Image.fromarray(image)
-    cl = TryChroma()
-    res = cl.search(img, constraints={}, index_name="image_clip")
-    return cl.parse_results(res, "image_clip")
+def image_search(image, index, category):
+    constraints = {"subCategory": category} if len(category) > 0 else {}
+    res = backend.search(image, constraints=constraints, index_name=index)
+    return backend.parse_results(res, index)
 
 
-demo = gr.Interface(fn=search_images_from_image, inputs=gr.inputs.Image(shape=(60, 80)), outputs="gallery")
+demo = gr.Interface(fn=image_search,
+                    inputs=[
+                            gr.inputs.Image(shape=(60, 80), type="pil"),
+                            gr.Radio(["image_clip", "image_fclip"]),
+                            "text"
+                    ],
+                    outputs="gallery")
 demo.launch()
