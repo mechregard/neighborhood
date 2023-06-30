@@ -17,4 +17,4 @@ demo = gr.Interface(fn=image_search,
                             "text"
                     ],
                     outputs="gallery")
-demo.launch()
+demo.launch(server_name="0.0.0.0", server_port=9090)

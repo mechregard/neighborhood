@@ -1,14 +1,15 @@
 [tool.poetry]
 name = "trychromadb"
 version = "0.1.0"
-description = ""
-authors = ["dlange <dave.lange@docusign.com>"]
+description = "Try out chromadb and some CLIP models"
+authors = ["dlange <dave.lange@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.9"
 chromadb = "^0.3.26"
 datasets = "*"
+torch = "^1.13.1"
 transformers = "*"
 sentence-transformers = "*"
 gradio = "*"
@@ -16,5 +17,5 @@ click = "*"
 pandas = "*"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
