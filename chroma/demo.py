@@ -13,7 +13,7 @@ def image_search(image, index, category):
 demo = gr.Interface(fn=image_search,
                     inputs=[
                             gr.inputs.Image(shape=(60, 80), type="pil"),
-                            gr.Radio([TryChroma.TYPE_CLIP_COL, TryChroma.TYPE_FCLIP_COL]),
+                            gr.Radio(["staud_image_clipb", "staud_image_clipl"]),
                             "text"
                     ],
                     outputs="gallery")
