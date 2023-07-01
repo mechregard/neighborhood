@@ -3,6 +3,8 @@ marqo
 towhee
 data
 chroma/db
+chroma/datasets
+chroma/scrape
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
