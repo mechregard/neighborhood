@@ -4,7 +4,8 @@ towhee
 data
 chroma/db
 chroma/datasets
-chroma/scrape
+chroma/images
+chroma/scraped
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

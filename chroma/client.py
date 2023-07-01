@@ -1,7 +1,6 @@
 from typing import List, Dict, Tuple, Optional, Any
 import logging
 from pathlib import Path
-import pickle
 import click
 import json
 import pandas as pd
@@ -17,10 +16,8 @@ from chromadb.config import Settings
 
 class TryChroma:
     DATASET_NAME = "ashraq/fashion-product-images-small"
-    TYPE_CLIP_COL = "image_clip"
-    TYPE_FCLIP_COL = "image_fclip"
-    EMBEDDER_CLIP = 'sentence-transformers/clip-ViT-B-32'
-    EMBEDDER_FCLIP = 'sentence-transformers/clip-ViT-L-14'
+    TYPE_CLIPB = "image_clipb"
+    TYPE_CLIPL = "image_clipl"
     MAX_RESULTS = 5
 
     def __init__(self):
@@ -35,11 +32,9 @@ class TryChroma:
                                     persist_directory="./db"
                                 ))
         dd = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self._embedder_clip = SentenceTransformer(TryChroma.EMBEDDER_CLIP, device=dd)
-        self._embedder_fclip = SentenceTransformer(TryChroma.EMBEDDER_FCLIP, device=dd)
-        self._collection_embedder = {
-            TryChroma.TYPE_CLIP_COL: self._embedder_clip,
-            TryChroma.TYPE_FCLIP_COL: self._embedder_fclip
+        self._collection_encoder = {
+            TryChroma.TYPE_CLIPB: SentenceTransformer('sentence-transformers/clip-ViT-B-32', device=dd),
+            TryChroma.TYPE_CLIPL: SentenceTransformer('sentence-transformers/clip-ViT-L-14', device=dd)
         }
 
     @staticmethod
@@ -64,43 +59,44 @@ class TryChroma:
         else:
             logging.error(f"Ingest skipped unknown {type}")
 
-    def prepare(self, dataset_name: str, embedder_name: str) -> None:
+    def prepare(self, dataset_name: str, encoder_name: str) -> None:
         """
         Prepare for usage by indexing images from a dataset,
         using embedder based in index name
-        :param index_name:
+        :param dataset_name:
+        :param encoder_name:
         :return:
         """
-        logging.info(f"Prepare loading {dataset_name} embedding {embedder_name}")
+        logging.info(f"Prepare loading {dataset_name} encoder {encoder_name}")
+        index_name = dataset_name+"_"+encoder_name
         images, metadata = self.load_dataset(dataset_name)
-        embeddings = self.embeddings(embedder_name, images)
-        self.build_index(dataset_name, embedder_name, embeddings, metadata)
-        map_path = Path("db", dataset_name+"_"+embedder_name+".pkl")
-        self._persist_map(images, metadata, map_path)
+        embeddings = self.embeddings(encoder_name, images)
+        self.build_index(index_name, embeddings, metadata)
+        self._save_images(index_name, images, metadata)
 
     def search(self,
                query_image: Image,
                constraints: Dict[str, str],
-               index_name: Optional[str] = "staud-small_image_clip",
-               embedder: Optional[str] = "image_clip") -> List[Dict[str,Any]]:
+               index_name: Optional[str] = "staud_image_clipb",
+               encoder: Optional[str] = "image_clipb") -> List[Dict[str,Any]]:
         """
         Answer back a list of metadata search results from the given Image
         and query constraints
         :param query_image:
         :param constraints:
         :param index_name:
+        :param encoder:
         :return:
         """
-        results = self.query_index(index_name, query_image, embedder, TryChroma.MAX_RESULTS, constraints)
+        results = self.query_index(index_name, query_image, encoder, TryChroma.MAX_RESULTS, constraints)
         logging.info(f"search results:{results}")
         return results
 
     ##############################################
     # Manage db
     ##############################################
-    def build_index(self, dataset: str, embedder: str, embeddings: List[Any], metadata: List[Dict[str, Any]]) -> None:
-        logging.info(f"build_index {dataset}_{embedder} {len(embeddings)=} {len(metadata)=}")
-        index_name = f"{dataset}_{embedder}"
+    def build_index(self, index_name: str, embeddings: List[Any], metadata: List[Dict[str, Any]]) -> None:
+        logging.info(f"build_index {index_name} {len(embeddings)=} {len(metadata)=}")
         ids = self._ids_from_metadata(metadata)
 
         self.delete_index(index_name)
@@ -122,11 +118,11 @@ class TryChroma:
     def query_index(self,
                     name: str,
                     query: Image,
-                    embedder: str,
+                    encoder: str,
                     num_results: int,
                     constraints: Dict[str, str]) -> List[Any]:
-        logging.info(f"index into {name} {type(query)=} {embedder=}")
-        query_embedding = self.embeddings(embedder, query)
+        logging.info(f"index into {name} {type(query)=} {encoder=}")
+        query_embedding = self.embeddings(encoder, query)
         collection = self._chroma_client.get_collection(name=name)
         results = collection.query(
             query_embeddings=[query_embedding],
@@ -147,16 +143,16 @@ class TryChroma:
         """
         logging.info(f"load_dataset {dataset_name}")
         dataset_path = Path("datasets", dataset_name)
-        dataset = datasets.load_from_disk(dataset_path)
+        dataset = datasets.load_from_disk(dataset_path.as_posix())
         images = dataset["image"]
         metadata = dataset.remove_columns("image")
         metadata = metadata.to_pandas().to_dict('records')
         return images, metadata
 
-    def embeddings(self, embedder_name: str, images) -> List[Any]:
+    def embeddings(self, encoder_name: str, images) -> List[Any]:
         # image.thumbnail((60, 80), img.Resampling.LANCZOS)
-        embedder = self._collection_embedder[embedder_name]
-        return embedder.encode(images).tolist()
+        encoder = self._collection_encoder[encoder_name]
+        return encoder.encode(images).tolist()
 
     def get_image(self, image_path: str) -> Image:
         im = img.open(image_path)
@@ -166,24 +162,23 @@ class TryChroma:
     def _ids_from_metadata(self, metadata: List[Dict[str, Any]]) -> List[str]:
         return [str(i) for i in pd.DataFrame(metadata)['id'].tolist()]
 
-    def _persist_map(self, images: List[object], metadata: List[Dict[str, Any]], mapping_path: Path) -> None:
+    def _save_images(self, index_name: str, images: List[object], metadata: List[Dict[str, Any]]) -> None:
         ids = self._ids_from_metadata(metadata)
-        id2image: Dict[str, object] = dict(zip(ids, images))
-        with open(mapping_path, 'wb') as f:
-            pickle.dump(id2image, f)
-
-    def _inflate_map(self, mapping_path: Path) -> Dict[str,Image]:
-        with open(mapping_path, 'rb') as f:
-            id2image = pickle.load(f)
-        return id2image
+        dir_path = Path("images", index_name)
+        dir_path.mkdir(parents=True, exist_ok=True)
+        k: str
+        v: Image
+        for k,v in zip(ids, images):
+            image_path = Path(dir_path, k+"_img.png")
+            v.save(image_path)
 
     def parse_results(self, metadata: List[Any], index_name: str) -> List[Image]:
         gallary = []
-        map_path = Path("db", index_name + ".pkl")
-        id2image = self._inflate_map(map_path)
+        dir_path = Path("images", index_name)
         for md in metadata:
             id = str(md['id'])
-            im = id2image[id]
+            image_path = Path(dir_path, id + "_img.png")
+            im = img.open(image_path)
             im.thumbnail((60, 80), img.Resampling.LANCZOS)
             gallary.append(im)
         return gallary
@@ -208,7 +203,7 @@ def cli(ctx):
 @click.option(
     "--src",
     type=click.STRING,
-    default="scraped/staud-small.json",
+    default="scraped/staud.json",
     help="data src for dataset",
 )
 @click.option(
@@ -220,7 +215,7 @@ def cli(ctx):
 @click.option(
     "--target",
     type=click.STRING,
-    default="staud-small",
+    default="staud",
     help="target directory within datasets",
 )
 @click.pass_context
@@ -235,36 +230,36 @@ def ingest(ctx, src: str, type: str, target: str):
 @click.option(
     "--dataset",
     type=click.STRING,
-    default="staud-small",
+    default="staud",
     help="dataset name (under datasets/)",
 )
 @click.option(
-    "--embedder",
+    "--encoder",
     type=click.STRING,
-    default="image_clip",
-    help="Type {image_clip|image_fclip}",
+    default="image_clipb",
+    help="Type {image_clipb|image_clipl}",
 )
 @click.pass_context
-def prepare(ctx, dataset: str, embedder: str):
+def prepare(ctx, dataset: str, encoder: str):
     """
-    Build collection using given name
+    Build index using given dataset, encoder
     """
     client = TryChroma()
-    client.prepare(dataset, embedder)
+    client.prepare(dataset, encoder)
 
 
 @cli.command("search")
 @click.option(
     "--index",
     type=click.STRING,
-    default="staud_image_clip",
-    help="{dataset_image_clip|dataset_image_fclip}",
+    default="staud_image_clipb",
+    help="{dataset_image_clipb|dataset_image_clipl}",
 )
 @click.option(
-    "--embedder",
+    "--encoder",
     type=click.STRING,
-    default="image_clip",
-    help="{image_clip|image_fclip}",
+    default="image_clipb",
+    help="{image_clipb|image_clipl}",
 )
 @click.option(
     "--image",
@@ -287,7 +282,7 @@ def prepare(ctx, dataset: str, embedder: str):
 @click.pass_context
 def search(ctx,
            index: str,
-           embedder: str,
+           encoder: str,
            image: Optional[str] = None,
            category: Optional[str] = None,
            show: Optional[bool] = False):
@@ -299,7 +294,7 @@ def search(ctx,
     constraints = {}
     if category is not None:
         constraints = {"subCategory": category}
-    results = client.search(query_image, constraints=constraints, index_name=index, embedder=embedder)
+    results = client.search(query_image, constraints=constraints, index_name=index, encoder=encoder)
     if show:
         client.display_result(results, index)
 
