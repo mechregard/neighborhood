@@ -62,7 +62,8 @@ class TryChroma:
     def prepare(self, dataset_name: str, encoder_name: str) -> None:
         """
         Prepare for usage by indexing images from a dataset,
-        using embedder based in index name
+        using embedder based in index name, and saving images by id
+        for search results.
         :param dataset_name:
         :param encoder_name:
         :return:
@@ -73,12 +74,12 @@ class TryChroma:
         embeddings = self.embeddings(encoder_name, images)
         self.build_index(index_name, embeddings, metadata)
         self._save_images(index_name, images, metadata)
+        TryChroma._update_encoder_mapping(index_name, encoder_name)
 
     def search(self,
                query_image: Image,
                constraints: Dict[str, str],
-               index_name: Optional[str] = "staud_image_clipb",
-               encoder: Optional[str] = "image_clipb") -> List[Dict[str,Any]]:
+               index_name: Optional[str] = "staud_image_clipb") -> List[Dict[str,Any]]:
         """
         Answer back a list of metadata search results from the given Image
         and query constraints
@@ -88,6 +89,7 @@ class TryChroma:
         :param encoder:
         :return:
         """
+        encoder = TryChroma._inflate_encoder_mapping()[index_name]
         results = self.query_index(index_name, query_image, encoder, TryChroma.MAX_RESULTS, constraints)
         logging.info(f"search results:{results}")
         return results
@@ -109,11 +111,14 @@ class TryChroma:
         logging.info(f"Indexed {index_name}: {collection.count()=}")
 
     def delete_index(self, name: str):
-        for c in self._chroma_client.list_collections():
-            if c.name == name:
+        for idx in self.indexes():
+            if idx == name:
                 self._chroma_client.delete_collection(name=name)
                 logging.info(f"Deleted index {name}")
                 break
+
+    def indexes(self) -> List[str]:
+        return [c.name for c in self._chroma_client.list_collections()]
 
     def query_index(self,
                     name: str,
@@ -150,13 +155,13 @@ class TryChroma:
         return images, metadata
 
     def embeddings(self, encoder_name: str, images) -> List[Any]:
-        # image.thumbnail((60, 80), img.Resampling.LANCZOS)
+        # image resize and keep original?
         encoder = self._collection_encoder[encoder_name]
         return encoder.encode(images).tolist()
 
     def get_image(self, image_path: str) -> Image:
         im = img.open(image_path)
-        im.thumbnail((60,80), img.Resampling.LANCZOS)
+        im.thumbnail((200,270))
         return im
 
     def _ids_from_metadata(self, metadata: List[Dict[str, Any]]) -> List[str]:
@@ -172,6 +177,18 @@ class TryChroma:
             image_path = Path(dir_path, k+"_img.png")
             v.save(image_path)
 
+    @staticmethod
+    def _update_encoder_mapping(index_name: str, encoder_name: str):
+        mapping = TryChroma._inflate_encoder_mapping()
+        mapping[index_name] = encoder_name
+        mapping_path = Path("db", "encoder_mapping.json")
+        json.dump(mapping, open(mapping_path, 'w'))
+
+    @staticmethod
+    def _inflate_encoder_mapping() -> Dict[str, str]:
+        mapping_path = Path("db", "encoder_mapping.json")
+        return json.load(open("db/encoder_mapping.json")) if mapping_path.exists() else {}
+
     def parse_results(self, metadata: List[Any], index_name: str) -> List[Image]:
         gallary = []
         dir_path = Path("images", index_name)
@@ -179,7 +196,7 @@ class TryChroma:
             id = str(md['id'])
             image_path = Path(dir_path, id + "_img.png")
             im = img.open(image_path)
-            im.thumbnail((60, 80), img.Resampling.LANCZOS)
+            im.thumbnail((200, 270))
             gallary.append(im)
         return gallary
 
@@ -253,19 +270,13 @@ def prepare(ctx, dataset: str, encoder: str):
     "--index",
     type=click.STRING,
     default="staud_image_clipb",
-    help="{dataset_image_clipb|dataset_image_clipl}",
-)
-@click.option(
-    "--encoder",
-    type=click.STRING,
-    default="image_clipb",
-    help="{image_clipb|image_clipl}",
+    help="in form: dataset_encoder",
 )
 @click.option(
     "--image",
     type=click.STRING,
     default=None,
-    help="Pathname to image file (default None)",
+    help="Pathname to query image file (default None)",
 )
 @click.option(
     "--category",
@@ -282,7 +293,6 @@ def prepare(ctx, dataset: str, encoder: str):
 @click.pass_context
 def search(ctx,
            index: str,
-           encoder: str,
            image: Optional[str] = None,
            category: Optional[str] = None,
            show: Optional[bool] = False):
@@ -294,7 +304,7 @@ def search(ctx,
     constraints = {}
     if category is not None:
         constraints = {"subCategory": category}
-    results = client.search(query_image, constraints=constraints, index_name=index, encoder=encoder)
+    results = client.search(query_image, constraints=constraints, index_name=index)
     if show:
         client.display_result(results, index)
 
