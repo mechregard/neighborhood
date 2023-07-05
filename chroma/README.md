@@ -45,8 +45,9 @@ and
 python client.py prepare --dataset=staud --encoder=image_clipl
 ```
 
-
-Do run a simple query against either index using a path to an image:
+#### Search
+Do run a simple query against an index using a path to an image. Optionally add category to filter and 
+boolean flag to display actual image results.
 ```
 $ python client.py search --help
 Usage: client.py search [OPTIONS]
@@ -59,6 +60,11 @@ Options:
   --category TEXT  Filter category (default None)
   --show BOOLEAN   True to display
   --help           Show this message and exit.
+```
+An example of searching the staud clib-b index for similar images to a demo image:
+```
+# create index staud_image_clipl
+python client.py search --index=staud_image_clipb --image=images/demo.jpeg --show=True
 ```
 
 ## Demo
