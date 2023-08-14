@@ -5,7 +5,7 @@ data
 chroma/db
 chroma/datasets
 chroma/images
-chroma/scraped
+chroma/scrape
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

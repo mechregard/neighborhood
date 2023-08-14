@@ -1,0 +1,28 @@
+[
+  {
+    "id": "2838b95b-5d42-49a7-856e-df78e5261184",
+    "gender": "Women",
+    "masterCategory": "Apparel",
+    "subCategory": "Topwear",
+    "articleType": "Tops",
+    "baseColour": "brown",
+    "season": "Summer",
+    "year": 2023,
+    "usage": "",
+    "productDisplayName": "GRACIE TOP | CLOVE",
+    "image": "https://cdn.shopify.com/s/files/1/1689/2633/files/gracie_top_angela_skirt_clove_02620_web.jpg?v=1685730167"
+  },
+  {
+    "id": "43c4b10b-65fe-4028-8824-cdb4009c5550",
+    "gender": "Women",
+    "masterCategory": "Footwear",
+    "subCategory": "Shoes",
+    "articleType": "Heels",
+    "baseColour": "tan",
+    "season": "Summer",
+    "year": 2023,
+    "usage": "",
+    "productDisplayName": "PETRA HEEL | TAN TURQUOISE",
+    "image": "https://cdn.shopify.com/s/files/1/1689/2633/files/STAUD_PETRA_HEEL_TOBACCOTURQUOISE_SUPF_23_ECOM_1.jpg?v=1683722843"
+  }
+]
