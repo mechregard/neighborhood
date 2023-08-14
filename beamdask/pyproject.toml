@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "beamingest"
+version = "0.1.0"
+description = "Try beam for ingest"
+authors = ["dlange <dave.lange@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+apache-beam = "*"
+pandas = "^1.5"
+pillow = "*"
+
+[tool.poetry.extras]
+apache-beam = ["dataframe"]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
